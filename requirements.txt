@@ -1,0 +1,9 @@
+Django>=3.2
+fastapi
+uvicorn
+boto3
+celery
+redis
+requests
+python-dotenv
+psycopg2-binary

@@ -1,5 +1,8 @@
-from fastapi import APIRouter, HTTPException, Header, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, EmailStr
+from api.dependencies import get_application
+from apps.emails.models import EmailLog
+from apps.emails.tasks import send_email_task
 import uuid
 
 router = APIRouter()
@@ -10,9 +13,17 @@ class EmailSendRequest(BaseModel):
     subject: str
     body: str
 
-@router.post("/send")
-def send_email(request: EmailSendRequest, x_api_key: str = Header(...)):
-    if not x_api_key:
-        raise HTTPException(status_code=403, detail="Missing API Key")
-    message_id = str(uuid.uuid4())
-    return {"message_id": message_id, "status": "queued"}
+
+@router.post("/send", status_code=status.HTTP_202_ACCEPTED)
+def send_email(request: EmailSendRequest, app=Depends(get_application)):
+    log = EmailLog.objects.create(
+        application=app,
+        message_id=str(uuid.uuid4()),
+        sender=request.from_email,
+        recipient=request.to_email,
+        subject=request.subject,
+        body=request.body,
+        direction='outbound',
+    )
+    send_email_task.delay(log.id)
+    return {"message_id": log.message_id, "status": "queued"}
